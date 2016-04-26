@@ -78,7 +78,13 @@
   var spaceRe = /\s+/;
   var equalsRe = /\s*=/;
   var curlyRe = /\s*\}/;
-  var tagRe = /#|\^|\/|>|\{|&|=|!/;
+  var tagRe = /#|\^|\/|>|\{|&|=|!|_/;
+
+  // Object to store custom section tag definitions registered using
+  // `mustache.register`. These custom sections will just be lambda functions
+  // but dynamically injected to the context object before actually rendering
+  // the section.
+  var customSections = {};
 
   /**
    * Breaks up the given `template` string into a tree of tokens. If the `tags`
@@ -200,7 +206,7 @@
       token = [ type, value, start, scanner.pos ];
       tokens.push(token);
 
-      if (type === '#' || type === '^') {
+      if (type === '#' || type === '^' || type === '_') {
         sections.push(token);
       } else if (type === '/') {
         // Check section nesting.
@@ -271,6 +277,7 @@
       switch (token[0]) {
         case '#':
         case '^':
+        case '_':
           collector.push(token);
           sections.push(token);
           collector = token[4] = [];
@@ -487,6 +494,7 @@
 
       if (symbol === '#') value = this.renderSection(token, context, partials, originalTemplate);
       else if (symbol === '^') value = this.renderInverted(token, context, partials, originalTemplate);
+      else if (symbol === '_') value = this.renderCustomSection(token, context, partials, originalTemplate);
       else if (symbol === '>') value = this.renderPartial(token, context, partials, originalTemplate);
       else if (symbol === '&') value = this.unescapedValue(token, context);
       else if (symbol === 'name') value = this.escapedValue(token, context);
@@ -550,6 +558,19 @@
       return this.renderTokens(this.parse(value), context, partials, value);
   };
 
+  Writer.prototype.renderCustomSection = function renderCustomSection (token, context, partials, originalTemplate) {
+    var sectionName = token[1];
+    if (!(sectionName in context)) {
+        if (!(sectionName in customSections)) {
+            throw new Error('Undefined custom section: ' + token[1]);
+        }
+        context.view[sectionName] = function customSection () {
+            return customSections[sectionName];
+        };
+    }
+    return this.renderSection(token, context, partials, originalTemplate);
+  };
+
   Writer.prototype.unescapedValue = function unescapedValue (token, context) {
     var value = context.lookup(token[1]);
     if (value != null)
@@ -567,7 +588,7 @@
   };
 
   mustache.name = 'mustache.js';
-  mustache.version = '2.2.1';
+  mustache.version = '2.3.1-dev-channelfix';
   mustache.tags = [ '{{', '}}' ];
 
   // All high-level mustache.* functions use this writer.
@@ -587,6 +608,14 @@
    */
   mustache.parse = function parse (template, tags) {
     return defaultWriter.parse(template, tags);
+  };
+
+  /**
+   * Registers a custom section tag definition, which is a lambda function that
+   * will be injected into the context object whenever the section tag is seen.
+   */
+  mustache.register = function register (section, definition) {
+      customSections[section] = definition;
   };
 
   /**
