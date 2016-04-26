@@ -84,7 +84,14 @@
   // `mustache.register`. These custom sections will just be lambda functions
   // but dynamically injected to the context object before actually rendering
   // the section.
-  var customSections = {};
+  var customSections = {
+    'i18n': function i18n (text, render) {
+        if (typeof _ !== 'function') {
+            throw new Error('i18n translation function `_` is not defined.');
+        }
+        return render(_(text));
+    }
+  };
 
   /**
    * Breaks up the given `template` string into a tree of tokens. If the `tags`
